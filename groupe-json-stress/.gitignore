@@ -24,3 +24,4 @@ models/
 *.safetensors
 *.gguf
 *.onnx
+results/report/
