@@ -1,19 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Schema 01 - Basic Object",
+  "title": "S1 - Basic Object",
   "type": "object",
   "properties": {
-    "name": {
-      "type": "string"
-    },
-    "age": {
-      "type": "integer",
-      "minimum": 0
-    },
-    "email": {
-      "type": "string",
-      "format": "email"
-    }
+    "name": {"type": "string", "minLength": 1},
+    "age": {"type": "integer", "minimum": 0},
+    "email": {"type": "string", "format": "email"}
   },
   "required": ["name", "age"],
   "additionalProperties": false
