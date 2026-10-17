@@ -12,7 +12,12 @@ import json
 import time
 from typing import Any
 
-from validator import validate_json
+try:
+    # 支持从 src.json_stress.retry 导入
+    from ..validator import validate_json
+except ImportError:
+    # 支持将 src 目录加入 Python 模块搜索路径
+    from validator import validate_json
 
 
 class RetryManager:

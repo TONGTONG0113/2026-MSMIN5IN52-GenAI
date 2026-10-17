@@ -256,3 +256,10 @@ R√©f√©rences techniques :
 - Documentation de `pytest` : https://docs.pytest.org/
 
 Les r√©f√©rences du mod√®le et du fournisseur d'API seront ajout√©es apr√®s leur s√©lection.
+
+## Utilisation de l'intelligence artificielle
+
+Des outils d'intelligence artificielle ont ®¶t®¶ utilis®¶s pour aider ®§
+l'impl®¶mentation de l'interface en ligne de commande (CLI), au d®¶bogage
+et ®§ la r®¶daction des tests. Les modifications ont ®¶t®¶ v®¶rifi®¶es et
+test®¶es avant leur soumission.
