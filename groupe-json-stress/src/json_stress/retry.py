@@ -13,10 +13,10 @@ import time
 from typing import Any
 
 try:
-    # 支持从 src.json_stress.retry 导入
+    # Support imports from src.json_stress.retry
     from ..validator import validate_json
 except ImportError:
-    # 支持将 src 目录加入 Python 模块搜索路径
+    # Support adding the src directory to the Python module search path
     from validator import validate_json
 
 
@@ -44,6 +44,48 @@ class RetryManager:
         self.max_cost = max_cost
         self.cost_per_attempt = cost_per_attempt
 
+    @staticmethod
+    def _is_output_truncated(errors: list[dict]) -> bool:
+        """
+        Detect errors indicating that the model reached its output token limit.
+
+        The OpenRouter generator includes finish_reason='length' in its
+        exception message when the response is truncated or empty.
+        """
+        for error in errors:
+            message = str(error.get("message", "")).lower()
+
+            if "finish_reason" in message and "length" in message:
+                return True
+
+        return False
+
+    @staticmethod
+    def _build_retry_feedback(errors: list[dict]) -> list[dict]:
+        """Build feedback for the next generation attempt."""
+        feedback = list(errors)
+
+        if RetryManager._is_output_truncated(errors):
+            feedback.append(
+                {
+                    "path": "$",
+                    "type": "output_truncated",
+                    "message": (
+                        "The previous response reached the output token "
+                        "limit and may have been truncated. On this attempt, "
+                        "generate a compact but complete JSON object that "
+                        "satisfies the entire schema. Use the minimum number "
+                        "of array items allowed by the schema, omit optional "
+                        "fields when possible, keep strings concise, and "
+                        "ensure all JSON objects, arrays, and strings are "
+                        "properly closed. Do not include explanations or "
+                        "Markdown fences."
+                    ),
+                }
+            )
+
+        return feedback
+
     def run(self, generator: Any, schema_name: str) -> dict:
         """Generate, parse, validate, and retry when necessary."""
 
@@ -66,6 +108,8 @@ class RetryManager:
         for attempt_number in range(1, self.max_attempts + 1):
             elapsed_ms = (time.perf_counter() - start_time) * 1000
 
+            # Stop before making another API call if the latency limit
+            # has already been reached.
             if (
                 self.max_latency_ms is not None
                 and elapsed_ms >= self.max_latency_ms
@@ -73,7 +117,9 @@ class RetryManager:
                 stop_reason = "latency_limit"
                 break
 
+            # This is a configured cost estimate, not actual API billing.
             next_cost = (attempts + 1) * self.cost_per_attempt
+
             if self.max_cost is not None and next_cost > self.max_cost:
                 stop_reason = "cost_limit"
                 break
@@ -86,6 +132,7 @@ class RetryManager:
             errors: list[dict] = []
             attempt_error_type = None
 
+            # Step 1: Generate the response.
             try:
                 raw_output = generator.generate(
                     schema_name,
@@ -94,6 +141,7 @@ class RetryManager:
             except Exception as exc:
                 attempt_valid = False
                 attempt_error_type = "generation_error"
+
                 errors = [
                     {
                         "path": "$",
@@ -101,12 +149,16 @@ class RetryManager:
                         "type": attempt_error_type,
                     }
                 ]
+
             else:
+                # Step 2: Parse the generated JSON.
                 try:
                     parsed_data = json.loads(raw_output)
+
                 except (json.JSONDecodeError, TypeError) as exc:
                     attempt_valid = False
                     attempt_error_type = "json_parse_error"
+
                     errors = [
                         {
                             "path": "$",
@@ -114,15 +166,19 @@ class RetryManager:
                             "type": attempt_error_type,
                         }
                     ]
+
                 else:
+                    # Step 3: Validate the parsed JSON against the schema.
                     try:
                         validation = validate_json(
                             parsed_data,
                             schema_name,
                         )
+
                     except Exception as exc:
                         attempt_valid = False
                         attempt_error_type = "validation_error"
+
                         errors = [
                             {
                                 "path": "$",
@@ -130,13 +186,18 @@ class RetryManager:
                                 "type": attempt_error_type,
                             }
                         ]
+
                     else:
                         attempt_valid = validation["valid"]
 
                         if not attempt_valid:
                             errors = validation.get("errors", [])
+
                             attempt_error_type = (
-                                errors[0].get("type", "validation_error")
+                                errors[0].get(
+                                    "type",
+                                    "validation_error",
+                                )
                                 if errors
                                 else "validation_error"
                             )
@@ -148,6 +209,7 @@ class RetryManager:
             if attempt_number == 1:
                 first_try_valid = attempt_valid
 
+            # Record every attempt for later analysis.
             history.append(
                 {
                     "attempt": attempt_number,
@@ -165,13 +227,19 @@ class RetryManager:
             final_errors = errors
             error_type = attempt_error_type
 
+            # Stop immediately when a valid JSON object is obtained.
             if attempt_valid:
                 error_type = None
                 break
 
-            feedback = errors
+            # Build feedback for the next attempt. If the previous
+            # response was truncated, include specific recovery guidance.
+            feedback = self._build_retry_feedback(errors)
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+            # Do not start another attempt after the latency budget
+            # has been exhausted.
             if (
                 self.max_latency_ms is not None
                 and elapsed_ms >= self.max_latency_ms
@@ -180,6 +248,9 @@ class RetryManager:
                 break
 
         total_latency_ms = (time.perf_counter() - start_time) * 1000
+
+        # Keep the existing estimated-cost behavior.
+        # Actual API costs are collected by the experiment runner.
         total_cost = attempts * self.cost_per_attempt
 
         if stop_reason is None:
