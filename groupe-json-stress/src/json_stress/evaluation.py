@@ -53,6 +53,9 @@ def load_results_jsonl(
 ) -> pd.DataFrame:
     """
     Charge les résultats depuis un fichier JSONL.
+
+    L'encodage utf-8-sig permet de lire aussi bien les fichiers UTF-8
+    classiques que les fichiers contenant un BOM UTF-8.
     """
     path = Path(path)
 
@@ -64,6 +67,7 @@ def load_results_jsonl(
     df = pd.read_json(
         path,
         lines=True,
+        encoding="utf-8-sig",
     )
 
     validate_result_columns(df)
@@ -75,6 +79,9 @@ def load_results_csv(
 ) -> pd.DataFrame:
     """
     Charge les résultats depuis un fichier CSV.
+
+    L'encodage utf-8-sig évite les problèmes liés à un éventuel BOM,
+    notamment avec des fichiers générés ou ouverts sous Windows/Excel.
     """
     path = Path(path)
 
@@ -83,7 +90,10 @@ def load_results_csv(
             f"Results file not found: {path}"
         )
 
-    df = pd.read_csv(path)
+    df = pd.read_csv(
+        path,
+        encoding="utf-8-sig",
+    )
 
     validate_result_columns(df)
     return df
