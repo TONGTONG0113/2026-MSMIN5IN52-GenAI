@@ -1,79 +1,88 @@
 # A3 — Contrats JSON sous stress
 
-**Cours :** MSMIN5IN52 — IA générative et chatbots  
-**Établissement :** EPF École d'ingénieurs  
-**Année :** 2026-2027  
-**Sujet :** A3 — Contrats JSON sous stress  
-**Statut :** Projet finalisé — MVP implémenté, testé et évalué
+## Groupe
 
----
+| **Membre** | **Contribution principale** |
+|---|---|
+| Ruofan | Conception des JSON Schemas et validation des données |
+| Zihao | Générateurs, intégration OpenRouter et stratégie de reprise |
+| Yao | CLI, évaluation expérimentale et génération des rapports |
 
-## 1. Présentation
+Les membres participent également à l'intégration, à la revue de code, aux tests de bout en bout et à la préparation de la soutenance.
 
-Les modèles de langage peuvent produire des réponses qui ressemblent à du JSON sans respecter complètement le contrat attendu : erreur de syntaxe, champ obligatoire absent, mauvais type, valeur invalide ou incohérence avec les règles métier.
+## Sujet
 
-Ce projet étudie la robustesse des sorties JSON générées par un LLM lorsque la complexité du JSON Schema augmente.
+- **Identifiant du catalogue :** A3
+- **Problématique :** Dans quelle mesure la complexité d'un JSON Schema affecte-t-elle la capacité d'un grand modèle de langage (LLM) à produire des sorties JSON conformes ? Une stratégie de validation et de reprise permet-elle d'améliorer la fiabilité sans augmenter significativement le coût et la latence ?
+- **MVP :** Une application Python permettant de générer des sorties JSON à partir de cinq schémas de difficulté croissante, de valider les résultats, de comparer une stratégie de génération unique (*baseline*) à une stratégie avec reprises (*retry*), puis de calculer les métriques et de générer un rapport expérimental.
 
-L'objectif est de mesurer :
+## Architecture
 
-- le taux de conformité au premier essai ;
-- l'impact de la complexité du schéma ;
-- l'efficacité d'une stratégie de validation et de reprise ;
-- le nombre de tentatives nécessaires ;
-- la latence ;
-- le coût des appels au modèle.
+Le projet est développé en Python. Son architecture sépare la génération, la validation, la stratégie de reprise, l'exécution des expériences et l'évaluation des résultats.
 
-Le projet compare deux stratégies :
+### Composants principaux
 
-- **baseline** : une seule génération, sans nouvelle tentative ;
-- **retry** : validation de la réponse et nouvelle génération en cas d'erreur, avec feedback transmis au modèle.
+- **JSON Schemas :** cinq schémas de difficulté croissante, stockés dans `src/schemas/`.
+- **Validateur :** `src/validator.py` vérifie la syntaxe JSON et la conformité structurelle avec la bibliothèque `jsonschema`.
+- **Générateur simulé :** `MockGenerator` permet d'exécuter des tests et des démonstrations sans connexion à un service externe.
+- **Générateur réel :** intégration d'OpenRouter à travers une interface compatible avec l'API OpenAI.
+- **Stratégie de reprise :** `src/json_stress/retry.py` analyse les erreurs de génération et de validation, transmet un retour au modèle et limite le nombre de tentatives.
+- **Expérimentation :** `experiment.py` exécute les campagnes de génération et enregistre les résultats au format JSONL.
+- **Évaluation :** `evaluation.py` calcule les métriques globales et les résultats par schéma et par stratégie.
+- **Rapports :** `report.py` produit des tableaux CSV, des graphiques PNG et un rapport Markdown.
+- **CLI :** `cli.py` permet de lancer les générations, l'évaluation et la production des rapports.
 
----
-
-## 2. Fonctionnalités
-
-Le projet fournit :
-
-- cinq JSON Schemas de difficulté croissante ;
-- un validateur syntaxique et structurel ;
-- un générateur simulé pour les tests hors ligne ;
-- un générateur réel utilisant OpenRouter ;
-- une stratégie de reprise avec feedback des erreurs ;
-- une limite configurable du nombre de tentatives ;
-- une gestion des limites de coût et de latence ;
-- une interface en ligne de commande ;
-- une campagne expérimentale baseline / retry ;
-- l'enregistrement des résultats au format JSONL ;
-- le calcul automatique des métriques ;
-- la génération de tableaux CSV ;
-- la génération de graphiques PNG ;
-- un rapport Markdown ;
-- des tests automatisés exécutables sans clé API ;
-- un support de démonstration et de soutenance.
-
-Le flux principal est le suivant :
+### Flux de données
 
 ```text
 JSON Schema
-    ↓
-Génération
-    ↓
-Parsing JSON
-    ↓
-Validation
-    ↓
-Reprise éventuelle
-    ↓
-Enregistrement
-    ↓
-Évaluation
-    ↓
-Rapport
+     |
+     v
+Générateur (MockGenerator ou OpenRouter)
+     |
+     v
+Réponse JSON
+     |
+     v
+Parsing et validation JSON Schema
+     |
+     +---- Valide ----> Enregistrement du résultat
+     |
+     +---- Invalide --> Analyse des erreurs
+                            |
+                            v
+                     Feedback au modèle
+                            |
+                            v
+                     Nouvelle tentative
+                     (si autorisée)
+                            |
+                            v
+                     Enregistrement JSONL
+                            |
+                            v
+                  Évaluation et métriques
+                            |
+                            v
+                 CSV, PNG et rapport Markdown
 ```
 
----
+### Configuration du modèle
 
-## 3. Architecture
+La campagne finale utilise les paramètres suivants :
+
+| Paramètre | Valeur |
+|---|---|
+| Fournisseur | OpenRouter |
+| Modèle | `qwen/qwen3.5-9b` |
+| Temperature | 0.2 |
+| Nombre maximal de tokens en sortie | 4096 |
+| Tentatives maximales en baseline | 1 |
+| Tentatives maximales en retry | 3 |
+
+Le système collecte, lorsque ces informations sont disponibles, les tokens d'entrée et de sortie, la latence, le coût et le statut de disponibilité du coût.
+
+### Structure du projet
 
 ```text
 groupe-json-stress/
@@ -81,23 +90,19 @@ groupe-json-stress/
 ├── .gitignore
 ├── README.md
 ├── requirements.txt
-│
 ├── results/
 │   ├── experiment_final.jsonl
 │   ├── experiment_summary.csv
 │   ├── paired_results.csv
 │   └── mock_results.jsonl
-│
 ├── src/
 │   ├── validator.py
-│   │
 │   ├── schemas/
 │   │   ├── schema_01.json
 │   │   ├── schema_02.json
 │   │   ├── schema_03.json
 │   │   ├── schema_04.json
 │   │   └── schema_05.json
-│   │
 │   └── json_stress/
 │       ├── __init__.py
 │       ├── cli.py
@@ -107,7 +112,6 @@ groupe-json-stress/
 │       ├── openrouter_generator.py
 │       ├── report.py
 │       └── retry.py
-│
 └── tests/
     ├── test_cli.py
     ├── test_evaluation.py
@@ -116,174 +120,14 @@ groupe-json-stress/
     └── test_validator.py
 ```
 
-L'architecture sépare volontairement :
-
-- la définition des contrats JSON ;
-- la génération ;
-- la validation ;
-- la stratégie de reprise ;
-- l'exécution des expériences ;
-- l'analyse statistique ;
-- la génération des rapports.
-
-Cette séparation permet de tester chaque composant indépendamment et de remplacer le fournisseur de modèle sans modifier toute l'application.
-
----
-
-## 4. JSON Schemas
-
-Cinq schémas sont utilisés afin d'augmenter progressivement la difficulté.
-
-### Schema 01
-
-Objet simple comportant des types et des champs obligatoires.
-
-### Schema 02
-
-Ajout d'objets imbriqués et de tableaux.
-
-### Schema 03
-
-Ajout de contraintes plus fortes, d'énumérations et de règles conditionnelles.
-
-### Schema 04
-
-Structures imbriquées plus complexes et contraintes sur les éléments.
-
-### Schema 05
-
-Contraintes croisées et règles de cohérence supplémentaires.
-
-Les fichiers se trouvent dans :
-
-```text
-src/schemas/
-```
-
----
-
-## 5. Validation
-
-Le validateur est défini dans :
-
-```text
-src/validator.py
-```
-
-La validation comporte deux étapes principales :
-
-1. vérifier que la sortie peut être interprétée comme du JSON ;
-2. vérifier que les données respectent le JSON Schema demandé.
-
-La bibliothèque `jsonschema` est utilisée pour vérifier les contraintes structurelles.
-
-Lorsqu'une validation échoue, les erreurs sont conservées afin de pouvoir :
-
-- identifier le type d'échec ;
-- enregistrer les erreurs dans les résultats ;
-- fournir un feedback lors d'une nouvelle tentative.
-
----
-
-## 6. Générateurs
-
-### 6.1. MockGenerator
-
-Le `MockGenerator` permet d'utiliser le projet sans connexion réseau ni clé API.
-
-Il est principalement utilisé pour :
-
-- les tests automatisés ;
-- les démonstrations reproductibles ;
-- les scénarios d'erreur ;
-- la validation de la stratégie de reprise.
-
-Il fournit également un plan B en cas d'indisponibilité du service externe.
-
-### 6.2. OpenRouter
-
-Les expériences réelles utilisent un générateur compatible avec l'API OpenAI via OpenRouter.
-
-Configuration utilisée pour la campagne finale :
-
-```text
-Provider    : OpenRouter
-Model       : qwen/qwen3.5-9b
-Temperature : 0.2
-Max tokens  : 4096
-```
-
-Le système collecte également, lorsque les informations sont disponibles :
-
-- les prompt tokens ;
-- les completion tokens ;
-- le coût ;
-- le statut du coût.
-
-Le coût peut être :
-
-- fourni directement par l'API ;
-- estimé à partir du nombre de tokens ;
-- marqué comme inconnu lorsqu'aucune information fiable n'est disponible.
-
----
-
-## 7. Stratégie de reprise
-
-La logique de reprise est implémentée dans :
-
-```text
-src/json_stress/retry.py
-```
-
-Le fonctionnement général est :
-
-```text
-Génération
-    ↓
-Parsing
-    ↓
-Validation
-    ↓
-Valide ?
-   /     \
- Oui     Non
-  ↓       ↓
-Succès   Analyse des erreurs
-          ↓
-        Feedback
-          ↓
-   Nouvelle tentative
-```
-
-Le système prend en charge :
-
-- les erreurs de génération ;
-- les erreurs de parsing JSON ;
-- les erreurs de validation ;
-- les réponses tronquées ;
-- un nombre maximal de tentatives ;
-- une limite optionnelle de coût ;
-- une limite optionnelle de latence ;
-- l'historique complet des tentatives.
-
-Pour la campagne expérimentale finale :
-
-```text
-baseline : 1 tentative maximum
-retry    : 3 tentatives maximum
-```
-
----
-
-## 8. Installation
+## Installation
 
 ### Prérequis
 
-- Python 3.11 ou version compatible ;
+- Python 3.11 ou version compatible avec les dépendances du projet ;
 - Git ;
 - une connexion Internet pour les expériences réelles ;
-- une clé OpenRouter uniquement pour lancer de nouvelles générations réelles.
+- une clé API OpenRouter pour effectuer de nouvelles générations réelles.
 
 ### Cloner le dépôt
 
@@ -294,16 +138,16 @@ git switch feature/json-stress
 cd groupe-json-stress
 ```
 
-### Environnement virtuel
+### Créer l'environnement virtuel
 
-Linux / macOS :
+**Linux / macOS :**
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-Windows PowerShell :
+**Windows PowerShell :**
 
 ```powershell
 python -m venv .venv
@@ -316,80 +160,52 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-Les principales bibliothèques utilisées sont :
+Les principales bibliothèques utilisées sont `jsonschema`, `openai`, `python-dotenv`, `pandas`, `matplotlib`, `pytest` et `tabulate`.
 
-```text
-pandas
-matplotlib
-pytest
-tabulate
-jsonschema
-openai
-python-dotenv
-```
+Les versions des dépendances doivent être figées dans `requirements.txt` afin de faciliter la reproduction des résultats.
 
----
-
-## 9. Configuration de l'API
+### Configurer les variables d'environnement
 
 Copier le fichier d'exemple :
-
-Linux / macOS :
 
 ```bash
 cp .env.example .env
 ```
 
-Windows PowerShell :
+Sous Windows PowerShell :
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Puis renseigner la clé localement :
+Renseigner ensuite les variables localement dans `.env` :
 
-```env
+```dotenv
 MODEL_API_KEY=your_api_key
 MODEL_BASE_URL=https://openrouter.ai/api/v1
 ```
 
-Les valeurs sensibles ne doivent jamais être ajoutées au dépôt.
+Ne jamais publier la clé API ni committer le fichier `.env`. Le fichier `.gitignore` exclut les secrets du dépôt.
 
-Le fichier `.env` est ignoré par Git.
+## Utilisation
 
----
+Le projet utilise le répertoire `src` comme chemin d'importation Python.
 
-## 10. Utilisation
+### Définir le PYTHONPATH
 
-Le projet utilise une organisation Python basée sur le dossier `src`.
-
-Avant les commandes suivantes, définir le `PYTHONPATH`.
-
-### Windows PowerShell
+**Windows PowerShell :**
 
 ```powershell
 $env:PYTHONPATH="src"
 ```
 
-### Linux / macOS
+**Linux / macOS :**
 
 ```bash
 export PYTHONPATH=src
 ```
 
----
-
-## 11. CLI
-
-Trois commandes principales sont proposées :
-
-```text
-generate
-evaluate
-report
-```
-
-### 11.1. Génération simulée
+### 1. Lancer une génération simulée
 
 ```bash
 python -m json_stress.cli generate --schema schema_01.json
@@ -401,330 +217,62 @@ Exemple avec trois tentatives maximum :
 python -m json_stress.cli generate --schema schema_03.json --max-attempts 3
 ```
 
-Cette commande utilise le `MockGenerator` et ne nécessite pas de clé API.
+Cette commande utilise `MockGenerator` et ne nécessite pas de clé API. Les résultats sont enregistrés par défaut dans `results/generated_results.jsonl`.
 
-Le résultat est enregistré par défaut dans :
+### 2. Lancer une expérience réelle
 
-```text
-results/generated_results.jsonl
-```
-
-### 11.2. Évaluation
-
-Pour analyser les résultats de la campagne finale :
-
-```bash
-python -m json_stress.cli evaluate results/experiment_final.jsonl
-```
-
-La commande affiche notamment :
-
-- le nombre de générations ;
-- le taux de conformité initial ;
-- le taux de conformité final ;
-- le taux d'échec final ;
-- le nombre moyen de tentatives ;
-- la latence moyenne ;
-- le coût total ;
-- le coût moyen ;
-- les résultats par schéma ;
-- les résultats par stratégie.
-
-### 11.3. Rapport
-
-```bash
-python -m json_stress.cli report results/experiment_final.jsonl --output-dir results/report
-```
-
-Le programme génère :
-
-```text
-results/report/
-├── compliance_by_schema.png
-├── cost_by_strategy.png
-├── latency_by_schema.png
-├── metrics_by_schema.csv
-├── metrics_by_schema_strategy.csv
-├── metrics_by_strategy.csv
-├── report.md
-└── strategy_comparison.png
-```
-
-Les fichiers de résultats UTF-8 classiques et les fichiers UTF-8 contenant un BOM sont pris en charge.
-
----
-
-## 12. Expériences OpenRouter
-
-Avant une campagne complète, la connexion au modèle peut être vérifiée avec :
+Vérifier d'abord la connexion au modèle :
 
 ```bash
 python -m json_stress.experiment --check-only
 ```
 
-Exemple de campagne :
+Lancer une campagne de test :
 
 ```bash
 python -m json_stress.experiment --runs-per-schema 40 --max-attempts 3 --output results/openrouter_experiment.jsonl
 ```
 
-La campagne finale utilise :
+Reproduire la configuration de la campagne finale :
 
 ```bash
 python -m json_stress.experiment --runs-per-schema 200 --max-attempts 3 --output results/experiment_final.jsonl
 ```
 
-Pour chaque schéma :
+Cette campagne comprend cinq schémas, 200 échantillons par schéma et deux stratégies, soit 2 000 résultats.
 
-```text
-200 échantillons
-× 2 stratégies
-= 400 résultats
+### 3. Évaluer les résultats
+
+```bash
+python -m json_stress.cli evaluate results/experiment_final.jsonl
 ```
 
-Pour l'ensemble des cinq schémas :
+### 4. Générer le rapport
 
-```text
-5 schémas
-× 200 échantillons
-× 2 stratégies
-= 2000 résultats
+```bash
+python -m json_stress.cli report results/experiment_final.jsonl --output-dir results/report
 ```
 
-Chaque échantillon possède un `sample_id` permettant d'associer les résultats des deux stratégies.
-
----
-
-## 13. Protocole expérimental
-
-### Configuration
-
-```text
-Provider            : OpenRouter
-Model               : qwen/qwen3.5-9b
-Temperature         : 0.2
-Max output tokens   : 4096
-Retry max attempts  : 3
-```
-
-### Taille
-
-```text
-Nombre de schémas          : 5
-Échantillons par schéma    : 200
-Stratégies                 : 2
-Résultats enregistrés      : 2000
-```
-
-### Stratégies
-
-#### Baseline
-
-Une seule génération est autorisée.
-
-Elle mesure la capacité du modèle à respecter directement le contrat JSON.
-
-#### Retry
-
-En cas d'échec, une nouvelle génération peut être demandée.
-
-Le système fournit les erreurs précédentes au générateur afin qu'il tente de produire une réponse corrigée.
-
----
-
-## 14. Métriques
-
-Les principales métriques sont :
-
-### Taux de conformité initiale
-
-Proportion des sorties valides dès la première tentative.
-
-### Taux de conformité finale
-
-Proportion des résultats valides à la fin de la stratégie.
-
-### Taux d'échec définitif
-
-Proportion des résultats restant invalides après toutes les tentatives autorisées.
-
-### Nombre de tentatives
-
-Nombre d'appels nécessaires pour obtenir le résultat final.
-
-### Latence
-
-Durée nécessaire pour effectuer la génération et les éventuelles reprises.
-
-### Coût
-
-Coût associé aux appels du modèle.
-
-Les métriques sont calculées :
-
-- globalement ;
-- par schéma ;
-- par stratégie ;
-- par couple schéma / stratégie.
-
----
-
-## 15. Résultats
-
-La campagne finale contient :
-
-```text
-2000 enregistrements
-```
-
-soit :
-
-```text
-1000 résultats baseline
-1000 résultats retry
-```
-
-### Résultats détaillés
-
-| Schéma | Stratégie | Résultats | Conformité initiale | Conformité finale | Tentatives moyennes | Latence moyenne |
-|---|---|---:|---:|---:|---:|---:|
-| Schema 01 | Baseline | 200 | 100 % | 100 % | 1.00 | 1156.76 ms |
-| Schema 01 | Retry | 200 | 100 % | 100 % | 1.00 | 1085.44 ms |
-| Schema 02 | Baseline | 200 | 100 % | 100 % | 1.00 | 1761.37 ms |
-| Schema 02 | Retry | 200 | 100 % | 100 % | 1.00 | 1569.83 ms |
-| Schema 03 | Baseline | 200 | 95 % | 95 % | 1.00 | 2749.80 ms |
-| Schema 03 | Retry | 200 | 96 % | **100 %** | 1.04 | 2759.96 ms |
-| Schema 04 | Baseline | 200 | 99.5 % | 99.5 % | 1.00 | 3388.09 ms |
-| Schema 04 | Retry | 200 | 100 % | 100 % | 1.00 | 4009.82 ms |
-| Schema 05 | Baseline | 200 | 100 % | 100 % | 1.00 | 2459.98 ms |
-| Schema 05 | Retry | 200 | 100 % | 100 % | 1.00 | 2312.17 ms |
-
----
-
-## 16. Comparaison globale
-
-### Baseline
-
-```text
-989 résultats valides / 1000
-Conformité finale : 98.9 %
-```
-
-### Retry
-
-```text
-1000 résultats valides / 1000
-Conformité finale : 100 %
-```
-
-La stratégie de reprise permet donc de faire passer le taux de conformité finale observé de :
-
-```text
-98.9 % → 100 %
-```
-
----
-
-## 17. Cas du Schema 03
-
-Le `schema_03.json` met particulièrement en évidence l'intérêt de la stratégie de reprise.
-
-### Baseline
-
-```text
-190 résultats valides / 200
-Conformité finale : 95 %
-```
-
-### Retry
-
-```text
-Conformité au premier essai : 96 %
-Conformité finale           : 100 %
-Tentatives moyennes         : 1.04
-```
-
-Dans le groupe expérimental utilisant la stratégie `retry`, les sorties invalides au premier essai ont pu être récupérées par les nouvelles tentatives autorisées.
-
----
-
-## 18. Coût
-
-Coût total enregistré pour les 1000 résultats baseline :
-
-```text
-0.055469 USD
-```
-
-Coût total enregistré pour les 1000 résultats retry :
-
-```text
-0.056277 USD
-```
-
-Différence :
-
-```text
-+0.000808 USD
-```
-
-soit environ :
-
-```text
-+1.46 %
-```
-
-Dans cette campagne, le gain de fiabilité a donc été obtenu avec une augmentation limitée du coût total.
-
----
-
-## 19. Latence
-
-Latence moyenne approximative sur l'ensemble des cinq schémas :
-
-```text
-Baseline : 2303.20 ms
-Retry    : 2347.44 ms
-```
-
-La stratégie de reprise entraîne une légère augmentation de la latence moyenne globale.
-
-Cette différence reste limitée dans l'expérience réalisée.
-
----
-
-## 20. Interprétation
-
-Les résultats montrent que le modèle respecte déjà très bien les contrats JSON simples.
-
-Les difficultés apparaissent principalement lorsque les contraintes deviennent plus complexes.
-
-Le cas du troisième schéma illustre l'intérêt du mécanisme de reprise :
-
-```text
-Baseline : 95 %
-Retry    : 100 %
-```
-
-La stratégie de reprise permet donc d'améliorer la robustesse des sorties structurées sans augmenter fortement le nombre moyen de tentatives.
-
-Il faut cependant préciser que les générations `baseline` et `retry` correspondent à des appels distincts au modèle.
-
-Les données sont comparées sur des `sample_id` appariés, mais un LLM reste probabiliste.
-
-Les résultats doivent donc être interprétés comme une comparaison de deux stratégies et non comme la réparation directe de chaque sortie obtenue par la baseline.
-
----
-
-## 21. Tests
-
-Les tests peuvent être exécutés sans clé API :
+Le programme génère notamment les fichiers suivants :
+
+- `metrics_by_schema.csv`
+- `metrics_by_schema_strategy.csv`
+- `metrics_by_strategy.csv`
+- `compliance_by_schema.png`
+- `cost_by_strategy.png`
+- `latency_by_schema.png`
+- `strategy_comparison.png`
+- `report.md`
+
+## Tests
+
+Les tests automatisés peuvent être exécutés sans clé API :
 
 ```bash
 python -m pytest -q
 ```
 
-Résultat de la version finale :
+**Résultat obtenu sur la version finale :**
 
 ```text
 53 passed
@@ -732,238 +280,127 @@ Résultat de la version finale :
 
 Les tests couvrent notamment :
 
-- les cinq schémas ;
-- les sorties valides ;
-- les sorties invalides ;
+- les cinq JSON Schemas ;
+- les sorties valides et invalides ;
 - les champs obligatoires manquants ;
 - les types incorrects ;
-- les erreurs de parsing ;
-- les erreurs de validation ;
+- les erreurs de parsing et de validation ;
 - les erreurs de génération ;
 - les réponses tronquées ;
-- les nouvelles tentatives ;
-- le nombre maximal de tentatives ;
-- les limites de coût ;
-- les limites de latence ;
-- la CLI ;
-- l'évaluation ;
-- la génération du rapport.
+- les nouvelles tentatives et leur limite maximale ;
+- les limites de coût et de latence ;
+- les commandes CLI ;
+- le calcul des métriques ;
+- la génération des rapports.
 
----
+Le `MockGenerator` permet de tester ces fonctionnalités de manière reproductible sans dépendre d'un service externe.
 
-## 22. Reproductibilité
+## Résultats et évaluation
 
-L'analyse finale peut être reproduite sans clé API à partir des résultats déjà présents dans le dépôt.
+### Baseline et protocole expérimental
 
-### Windows PowerShell
+Deux stratégies sont comparées :
 
-```powershell
-python -m pip install -r requirements.txt
+- **Baseline :** une seule génération, sans nouvelle tentative.
+- **Retry :** validation de la réponse et nouvelle génération en cas d'erreur, avec transmission des erreurs précédentes au modèle.
 
-$env:PYTHONPATH="src"
+La campagne finale utilise OpenRouter et le modèle `qwen/qwen3.5-9b`, avec une température de 0.2 et un maximum de 4096 tokens en sortie.
 
-python -m pytest -q
+| Paramètre | Valeur |
+|---|---:|
+| Nombre de schémas | 5 |
+| Échantillons par schéma | 200 |
+| Stratégies | 2 |
+| Résultats baseline | 1 000 |
+| Résultats retry | 1 000 |
+| Total | 2 000 |
 
-python -m json_stress.cli evaluate results\experiment_final.jsonl
+Chaque échantillon possède un `sample_id` permettant de rapprocher les résultats des deux stratégies.
 
-python -m json_stress.cli report results\experiment_final.jsonl --output-dir results\report
-```
+### Résultats par schéma
 
-### Linux / macOS
+| Schéma | Stratégie | Résultats | Conformité initiale | Conformité finale | Tentatives moyennes |
+|---|---|---:|---:|---:|---:|
+| Schema 01 | Baseline | 200 | 100 % | 100 % | 1,00 |
+| Schema 01 | Retry | 200 | 100 % | 100 % | 1,00 |
+| Schema 02 | Baseline | 200 | 100 % | 100 % | 1,00 |
+| Schema 02 | Retry | 200 | 100 % | 100 % | 1,00 |
+| Schema 03 | Baseline | 200 | 95 % | 95 % | 1,00 |
+| Schema 03 | Retry | 200 | 96 % | 100 % | 1,04 |
+| Schema 04 | Baseline | 200 | 99,5 % | 99,5 % | 1,00 |
+| Schema 04 | Retry | 200 | 100 % | 100 % | 1,00 |
+| Schema 05 | Baseline | 200 | 100 % | 100 % | 1,00 |
+| Schema 05 | Retry | 200 | 100 % | 100 % | 1,00 |
 
-```bash
-python -m pip install -r requirements.txt
+### Comparaison globale
 
-export PYTHONPATH=src
+| Métrique | Baseline | Retry |
+|---|---:|---:|
+| Résultats valides | 989 / 1 000 | 1 000 / 1 000 |
+| Conformité finale | 98,9 % | 100 % |
+| Coût total enregistré | 0,055469 USD | 0,056277 USD |
+| Latence moyenne globale | 2 303,20 ms | 2 347,44 ms |
 
-python -m pytest -q
+La stratégie retry améliore la conformité finale observée de 98,9 % à 100 %.
 
-python -m json_stress.cli evaluate results/experiment_final.jsonl
+L'augmentation du coût total enregistré est de 0,000808 USD, soit environ 1,46 %. La latence moyenne augmente d'environ 44,24 ms.
 
-python -m json_stress.cli report results/experiment_final.jsonl --output-dir results/report
-```
+### Interprétation
 
-Une clé OpenRouter n'est nécessaire que pour générer de nouveaux résultats réels.
+Les schémas les plus simples présentent déjà un taux de conformité de 100 % avec les deux stratégies. Le gain principal apparaît sur le Schema 03, pour lequel la conformité finale passe de 95 % à 100 % avec la stratégie retry.
 
----
+Le nombre moyen de tentatives de 1,04 pour ce schéma indique que seules quelques générations supplémentaires ont été nécessaires.
 
-## 23. Fichiers de résultats
+Ces résultats suggèrent que la validation suivie d'une reprise peut améliorer la fiabilité des sorties structurées à un coût supplémentaire limité dans la configuration testée.
 
-### `results/experiment_final.jsonl`
+Il convient toutefois de noter que les deux stratégies effectuent des appels distincts au modèle. Les échantillons sont appariés par `sample_id`, mais les résultats ne représentent pas la réparation directe de chaque sortie baseline. Les performances peuvent également varier avec le modèle, la température, le fournisseur ou la complexité des contraintes.
 
-Contient les 2000 résultats détaillés de la campagne finale.
+## Limites et plan B
 
-Les enregistrements contiennent notamment :
+### Limites connues
 
-```text
-schema_id
-strategy
-sample_id
-first_try_valid
-final_valid
-attempts
-latency_ms
-cost
-error_type
-provider
-model
-data
-raw_output
-errors
-history
-stop_reason
-prompt_tokens
-completion_tokens
-cost_status
-```
+- Les sorties des LLM sont probabilistes.
+- Les résultats dépendent du modèle et de sa configuration.
+- Les conclusions ne peuvent pas être généralisées à tous les modèles.
+- Certaines règles métier ne sont pas entièrement exprimables avec JSON Schema.
+- Les nouvelles tentatives peuvent augmenter le coût et la latence.
+- Les tarifs des fournisseurs externes peuvent évoluer.
+- Certains coûts peuvent être estimés lorsque l'API ne fournit pas de valeur fiable.
+- La campagne évalue une configuration précise et ne constitue pas une comparaison exhaustive de tous les LLM.
 
-### `results/experiment_summary.csv`
+### Dépendances externes
 
-Contient une synthèse des résultats par :
+Les nouvelles générations réelles nécessitent une connexion Internet, une clé API valide et un service OpenRouter disponible.
 
-```text
-schéma × stratégie
-```
+### Plan B : démonstration hors ligne
 
-### `results/paired_results.csv`
+En cas d'indisponibilité de l'API, de problème réseau, de quota épuisé ou d'absence de clé API, le projet peut être démontré avec `MockGenerator`.
 
-Permet d'analyser les stratégies baseline et retry à partir des identifiants d'échantillons correspondants.
+Ce mode permet d'exécuter les tests, de simuler des erreurs, de vérifier la validation, de présenter la stratégie retry et de générer des rapports à partir de résultats existants.
 
----
+L'évaluation et la génération des rapports peuvent également être reproduites à partir du fichier `results/experiment_final.jsonl`, sans effectuer de nouveaux appels au modèle.
 
-## 24. Limites
+## Répartition du travail
 
-Plusieurs limites doivent être prises en compte :
+Le travail est organisé autour de trois responsabilités principales :
 
-- les réponses d'un LLM restent probabilistes ;
-- les résultats dépendent du modèle choisi ;
-- les résultats peuvent évoluer avec une autre température ;
-- les résultats ne garantissent pas le même comportement avec un autre fournisseur ;
-- certaines règles métier sont difficiles à représenter uniquement avec JSON Schema ;
-- les nouvelles tentatives peuvent augmenter le coût et la latence ;
-- les tarifs d'un fournisseur externe peuvent évoluer ;
-- certains coûts peuvent être estimés lorsque l'API ne fournit pas directement la valeur réelle ;
-- la campagne évalue une configuration précise et ne prétend pas représenter tous les LLM.
+1. **Schémas et validation :** conception des cinq JSON Schemas, validation des données et tests associés.
+2. **Génération et reprise :** interface des générateurs, intégration OpenRouter, gestion des erreurs et exécution des expériences.
+3. **CLI et évaluation :** commandes, calcul des métriques, comparaison des stratégies, tableaux, graphiques et rapports.
 
----
+Les membres contribuent également à l'intégration, à la revue de code, aux tests de bout en bout et à la préparation de la soutenance.
 
-## 25. Plan B
+Les noms des membres et leurs contributions individuelles doivent être complétés en fonction de la répartition réelle du travail.
 
-Le projet peut fonctionner sans API externe grâce au `MockGenerator`.
+## Licence et références
 
-Il permet :
+### Licence
 
-- d'exécuter les tests ;
-- de démontrer la génération ;
-- de provoquer des erreurs contrôlées ;
-- de tester la validation ;
-- de démontrer la stratégie de reprise ;
-- d'évaluer des fichiers de résultats ;
-- de générer le rapport.
+- **Code source :** licence du projet à préciser.
+- **Modèle `qwen/qwen3.5-9b` :** vérifier les conditions de licence et d'utilisation applicables au modèle choisi.
+- **Données expérimentales :** résultats générés dans le cadre du projet ; leur statut de réutilisation et de redistribution doit être précisé si nécessaire.
 
-Le projet reste donc démontrable même en cas :
-
-- d'indisponibilité d'OpenRouter ;
-- de problème réseau ;
-- de quota API épuisé ;
-- de clé API indisponible.
-
----
-
-## 26. Sécurité
-
-Les clés API ne sont jamais stockées directement dans le code source.
-
-Les secrets doivent uniquement être placés dans :
-
-```text
-.env
-```
-
-Le `.gitignore` exclut notamment :
-
-```text
-.env
-.env.*
-*.pem
-*.key
-*.p12
-*.pfx
-secrets.json
-```
-
-L'exception suivante permet uniquement de versionner le fichier modèle :
-
-```text
-!.env.example
-```
-
-Le fichier `.env.example` contient seulement les noms des variables et aucune valeur secrète.
-
----
-
-## 27. Répartition du travail
-
-Le projet est organisé autour de trois responsabilités principales.
-
-### Schémas et validation
-
-- conception des cinq JSON Schemas ;
-- validation des données ;
-- gestion des contraintes ;
-- tests associés.
-
-### Génération et reprise
-
-- interface du générateur ;
-- générateur simulé ;
-- intégration OpenRouter ;
-- gestion des erreurs ;
-- stratégie de reprise ;
-- exécution des expériences réelles.
-
-### CLI, évaluation et rapport
-
-- interface en ligne de commande ;
-- chargement des résultats ;
-- calcul des métriques ;
-- comparaison baseline / retry ;
-- génération des tableaux ;
-- génération des graphiques ;
-- génération du rapport ;
-- prise en charge des fichiers UTF-8 et UTF-8 BOM.
-
-Les membres participent également à :
-
-- l'intégration ;
-- la revue de code ;
-- la validation finale ;
-- les tests de bout en bout ;
-- la préparation des slides ;
-- la soutenance et la démonstration.
-
----
-
-## 28. Livrables
-
-Le projet final comprend :
-
-- le code source ;
-- cinq JSON Schemas ;
-- les tests automatisés ;
-- un fichier `.env.example` sans secret ;
-- une interface de démonstration en ligne de commande ;
-- les données de la campagne expérimentale ;
-- les métriques ;
-- les graphiques ;
-- le rapport Markdown ;
-- la documentation de reproduction ;
-- les slides de soutenance ;
-- l'historique Git du développement.
-
----
-
-## 29. Références
+### Références techniques
 
 - JSON Schema : https://json-schema.org/
 - jsonschema : https://python-jsonschema.readthedocs.io/
@@ -973,51 +410,7 @@ Le projet final comprend :
 - OpenRouter : https://openrouter.ai/
 - OpenAI Python SDK : https://github.com/openai/openai-python
 
----
+### Utilisation de l'intelligence artificielle
 
-## 30. Utilisation de l'intelligence artificielle
+Des outils d'intelligence artificielle ont été utilisés comme assistance au développement, notamment pour l'implémentation de fonctionnalités, le débogage, l'amélioration des tests, la revue de code et la documentation. Les propositions retenues ont été relues, adaptées et testées avant leur intégration.
 
-Des outils d'intelligence artificielle ont été utilisés comme assistance au cours du développement, notamment pour :
-
-- l'aide à l'implémentation de certaines fonctionnalités ;
-- l'interface en ligne de commande ;
-- le débogage ;
-- la rédaction et l'amélioration de tests ;
-- la revue du code ;
-- la documentation.
-
-Les propositions produites avec assistance ont été relues, adaptées, exécutées et testées avant leur intégration au projet.
-
----
-
-## Conclusion
-
-Ce projet montre qu'une chaîne composée de :
-
-```text
-génération
-+ parsing JSON
-+ validation JSON Schema
-+ feedback d'erreur
-+ reprise bornée
-```
-
-peut améliorer la robustesse des sorties structurées produites par un modèle de langage.
-
-La campagne finale comporte **2000 résultats expérimentaux**.
-
-La stratégie baseline atteint :
-
-```text
-98.9 % de conformité finale
-```
-
-contre :
-
-```text
-100 % avec la stratégie retry
-```
-
-Dans l'expérience réalisée, cette amélioration est obtenue avec une augmentation limitée du coût et de la latence.
-
-La validation et la reprise constituent donc un mécanisme utile lorsqu'une application dépend d'un contrat JSON strict et ne peut pas accepter directement une sortie invalide produite par un LLM.
