@@ -1,0 +1,43 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe6ff;
+  --color-brand-500: #3d63dd;
+  --color-brand-600: #2f4fc4;
+  --color-brand-700: #263f9e;
+  --color-brand-900: #1a2a66;
+  --color-mark: #fde68a;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* Highlight boxes drawn over PDF pages and text blocks. */
+.citation-mark {
+  background: color-mix(in srgb, var(--color-mark) 55%, transparent);
+  outline: 2px solid color-mix(in srgb, #f59e0b 70%, transparent);
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.streaming-caret::after {
+  content: "▍";
+  margin-left: 2px;
+  color: var(--color-brand-500);
+  animation: caret-blink 1s steps(1) infinite;
+}
